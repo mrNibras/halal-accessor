@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HalalAccessor — API Test Dashboard</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; background: #0f172a; color: #e2e8f0; min-height: 100vh; }
+    .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+    header { text-align: center; padding: 30px 0 20px; border-bottom: 1px solid #1e293b; margin-bottom: 30px; }
+    h1 { font-size: 2rem; background: linear-gradient(135deg, #22c55e, #3b82f6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 8px; }
+    .subtitle { color: #64748b; font-size: 0.9rem; }
+    .controls { display: flex; gap: 12px; justify-content: center; margin: 20px 0; flex-wrap: wrap; }
+    button { padding: 12px 28px; border: none; border-radius: 8px; font-size: 0.95rem; font-weight: 600; cursor: pointer; transition: all 0.2s; }
+    .btn-run { background: linear-gradient(135deg, #22c55e, #16a34a); color: white; }
+    .btn-run:hover { transform: translateY(-1px); box-shadow: 0 4px 15px rgba(34, 197, 94, 0.3); }
+    .btn-run:disabled { background: #334155; cursor: not-allowed; transform: none; box-shadow: none; }
+    .btn-clear { background: #1e293b; color: #94a3b8; border: 1px solid #334155; }
+    .btn-clear:hover { background: #334155; }
+    #status { text-align: center; margin: 15px 0; font-size: 0.9rem; color: #64748b; }
+    #status.running { color: #facc15; }
+    #status.done { color: #22c55e; }
+    #status.error { color: #ef4444; }
+    .summary-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin: 20px 0; }
+    .card { background: #1e293b; border-radius: 12px; padding: 20px; text-align: center; border: 1px solid #334155; }
+    .card .value { font-size: 2.5rem; font-weight: 800; }
+    .card .label { color: #64748b; font-size: 0.85rem; margin-top: 4px; }
+    .card.passed .value { color: #22c55e; }
+    .card.failed .value { color: #ef4444; }
+    .card.total .value { color: #3b82f6; }
+    .card.score .value { color: #a78bfa; }
+    .phase { background: #1e293b; border-radius: 12px; margin-bottom: 16px; border: 1px solid #334155; overflow: hidden; }
+    .phase-header { padding: 16px 20px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; background: #162032; }
+    .phase-header:hover { background: #1a2744; }
+    .phase-title { font-weight: 600; font-size: 1rem; }
+    .phase-badge { background: #334155; padding: 4px 12px; border-radius: 20px; font-size: 0.8rem; }
+    .phase-badge.all-pass { background: rgba(34, 197, 94, 0.2); color: #22c55e; }
+    .phase-badge.has-fail { background: rgba(239, 68, 68, 0.2); color: #ef4444; }
+    .phase-body { padding: 0; }
+    .phase-body.collapsed { display: none; }
+    .test-row { display: flex; align-items: center; padding: 10px 20px; border-top: 1px solid #0f172a; font-size: 0.9rem; }
+    .test-row:hover { background: #162032; }
+    .test-icon { width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin-right: 12px; font-size: 0.75rem; font-weight: 700; flex-shrink: 0; }
+    .test-icon.pass { background: rgba(34, 197, 94, 0.2); color: #22c55e; }
+    .test-icon.fail { background: rgba(239, 68, 68, 0.2); color: #ef4444; }
+    .test-name { flex: 1; }
+    .test-detail { color: #64748b; font-size: 0.8rem; font-family: 'Fira Code', monospace; }
+    .progress-bar { width: 100%; height: 4px; background: #1e293b; border-radius: 2px; margin: 20px 0; overflow: hidden; }
+    .progress-fill { height: 100%; background: linear-gradient(90deg, #22c55e, #3b82f6); transition: width 0.3s; border-radius: 2px; }
+    .log-panel { background: #0a0e17; border-radius: 8px; padding: 16px; margin-top: 20px; max-height: 300px; overflow-y: auto; font-family: 'Fira Code', monospace; font-size: 0.8rem; line-height: 1.6; }
+    .log-line { color: #64748b; }
+    .log-line .pass { color: #22c55e; }
+    .log-line .fail { color: #ef4444; }
+    .log-line .info { color: #facc15; }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+    .running-indicator { animation: pulse 1s infinite; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>🧪 HalalAccessor API Test Dashboard</h1>
+      <p class="subtitle">Full Integration + Socket.io Real-Time Test Suite — 135 Tests</p>
+    </header>
+
+    <div class="controls">
+      <button class="btn-run" id="runBtn" onclick="runAllTests()">▶ Run All Tests</button>
+      <button class="btn-clear" onclick="clearResults()">Clear Results</button>
+    </div>
+
+    <div class="progress-bar"><div class="progress-fill" id="progressBar" style="width: 0%"></div></div>
+
+    <div id="status">Click "Run All Tests" to begin testing</div>
+
+    <div class="summary-cards" id="summaryCards" style="display:none">
+      <div class="card passed"><div class="value" id="passedCount">0</div><div class="label">Passed</div></div>
+      <div class="card failed"><div class="value" id="failedCount">0</div><div class="label">Failed</div></div>
+      <div class="card total"><div class="value" id="totalCount">0</div><div class="label">Total</div></div>
+      <div class="card score"><div class="value" id="scoreValue">0%</div><div class="label">Score</div></div>
+    </div>
+
+    <div id="testResults"></div>
+
+    <div class="log-panel" id="logPanel"></div>
+  </div>
+
+  <script>
+    const API = 'http://localhost:5000';
+
+    let passed = 0, failed = 0, totalTests = 0;
+    let phases = {};
+    let tokens = {};
+
+    function log(msg, type = '') {
+      const panel = document.getElementById('logPanel');
+      const line = document.createElement('div');
+      line.className = 'log-line';
+      line.innerHTML = `<span class="${type}">${msg}</span>`;
+      panel.appendChild(line);
+      panel.scrollTop = panel.scrollHeight;
+    }
+
+    function setStatus(msg, type = '') {
+      const el = document.getElementById('status');
+      el.textContent = msg;
+      el.className = type;
+    }
+
+    function setProgress(pct) {
+      document.getElementById('progressBar').style.width = pct + '%';
+    }
+
+    function record(phase, name, ok, detail = '') {
+      if (!phases[phase]) phases[phase] = { tests: [], passCount: 0, failCount: 0 };
+      phases[phase].tests.push({ name, ok, detail });
+      if (ok) { phases[phase].passCount++; passed++; }
+      else { phases[phase].failCount++; failed++; }
+      totalTests++;
+
+      document.getElementById('passedCount').textContent = passed;
+      document.getElementById('failedCount').textContent = failed;
+      document.getElementById('totalCount').textContent = totalTests;
+      document.getElementById('scoreValue').textContent = Math.round((passed / totalTests) * 100) + '%';
+      setProgress((totalTests / 135) * 100);
+
+      renderPhase(phase);
+    }
+
+    function renderPhase(phaseName) {
+      const phase = phases[phaseName];
+      if (!phase) return;
+
+      let container = document.getElementById('phase-' + phaseName.replace(/\s+/g, '-'));
+      if (!container) {
+        container = document.createElement('div');
+        container.className = 'phase';
+        container.id = 'phase-' + phaseName.replace(/\s+/g, '-');
+        container.innerHTML = `
+          <div class="phase-header" onclick="togglePhase(this)">
+            <span class="phase-title">${phaseName}</span>
+            <span class="phase-badge" id="badge-${phaseName.replace(/\s+/g, '-')}">0/0</span>
+          </div>
+          <div class="phase-body" id="body-${phaseName.replace(/\s+/g, '-')}"></div>
+        `;
+        document.getElementById('testResults').appendChild(container);
+      }
+
+      const body = document.getElementById('body-' + phaseName.replace(/\s+/g, '-'));
+      body.innerHTML = '';
+      phase.tests.forEach(t => {
+        body.innerHTML += `
+          <div class="test-row">
+            <div class="test-icon ${t.ok ? 'pass' : 'fail'}">${t.ok ? '✓' : '✗'}</div>
+            <div class="test-name">${t.name}</div>
+            <div class="test-detail">${t.detail}</div>
+          </div>
+        `;
+      });
+
+      const badge = document.getElementById('badge-' + phaseName.replace(/\s+/g, '-'));
+      const allPass = phase.failCount === 0;
+      badge.className = 'phase-badge ' + (allPass ? 'all-pass' : 'has-fail');
+      badge.textContent = `${phase.passCount}/${phase.passCount + phase.failCount}` + (allPass ? ' ✓' : '');
+    }
+
+    function togglePhase(header) {
+      const body = header.nextElementSibling;
+      body.classList.toggle('collapsed');
+    }
+
+    function assert(phase, name, condition, detail = '') {
+      record(phase, name, condition, detail);
+      if (!condition) console.error(`FAIL: ${name} — ${detail}`);
+    }
+
+    async function http(method, path, body, token) {
+      const url = API + path;
+      const headers = { 'Content-Type': 'application/json' };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+      const res = await fetch(url, { method, headers, body: body ? JSON.stringify(body) : undefined });
+      let data;
+      try { data = await res.json(); } catch { data = null; }
+      return { status: res.status, data };
+    }
+
+    function clearResults() {
+      passed = 0; failed = 0; totalTests = 0;
+      phases = {};
+      document.getElementById('testResults').innerHTML = '';
+      document.getElementById('logPanel').innerHTML = '';
+      document.getElementById('summaryCards').style.display = 'none';
+      setProgress(0);
+      setStatus('Click "Run All Tests" to begin testing');
+    }
+
+    async function runAllTests() {
+      const btn = document.getElementById('runBtn');
+      btn.disabled = true;
+      btn.textContent = '⏳ Running...';
+      clearResults();
+      document.getElementById('summaryCards').style.display = 'grid';
+
+      try {
+        // ── Phase 1: Health ──
+        setStatus('Running: Health Check...', 'running');
+        log('═══ Phase 1: Health Check ═══', 'info');
+        const health = await http('GET', '/health');
+        assert('1. Health Check', 'GET /health', health.status === 200, `status=${health.status}`);
+        assert('1. Health Check', 'Health returns ok', health.data?.status === 'ok');
+        log(`  ✓ Health: ${health.data?.status}`);
+
+        // ── Phase 2: Auth ──
+        setStatus('Running: Auth Module...', 'running');
+        log('═══ Phase 2: Auth Module ═══', 'info');
+        const reg = await http('POST', '/api/auth/register', { name: 'Browser Test', phone: '+251966666666', password: 'browserpass123' });
+        assert('2. Auth Module', 'POST /api/auth/register', reg.status === 201, `status=${reg.status}`);
+        assert('2. Auth Module', 'Returns user object', !!reg.data?.user);
+        assert('2. Auth Module', 'Returns accessToken', !!reg.data?.accessToken);
+        assert('2. Auth Module', 'Default role is CUSTOMER', reg.data?.user?.role === 'CUSTOMER');
+        tokens.customer = reg.data?.accessToken;
+
+        const dupReg = await http('POST', '/api/auth/register', { name: 'Dup', phone: '+251966666666', password: 'x' });
+        assert('2. Auth Module', 'Duplicate registration rejected', dupReg.status === 409, `status=${dupReg.status}`);
+
+        const login = await http('POST', '/api/auth/login', { phone: '+251966666666', password: 'browserpass123' });
+        assert('2. Auth Module', 'POST /api/auth/login', login.status === 200, `status=${login.status}`);
+        assert('2. Auth Module', 'Login returns token', !!login.data?.accessToken);
+        tokens.customer = login.data?.accessToken;
+
+        const badLogin = await http('POST', '/api/auth/login', { phone: '+251966666666', password: 'wrong' });
+        assert('2. Auth Module', 'Wrong password rejected', badLogin.status === 401);
+
+        const noAuth = await http('GET', '/api/auth/me');
+        assert('2. Auth Module', 'Unauth /me rejected', noAuth.status === 401);
+
+        const me = await http('GET', '/api/auth/me', undefined, tokens.customer);
+        assert('2. Auth Module', 'GET /api/auth/me', me.status === 200);
+        assert('2. Auth Module', 'GetMe returns correct user', me.data?.phone === '+251966666666');
+
+        const adminLogin = await http('POST', '/api/auth/login', { phone: '+251900000000', password: 'admin123' });
+        assert('2. Auth Module', 'Admin login', adminLogin.status === 200);
+        assert('2. Auth Module', 'Admin role confirmed', adminLogin.data?.user?.role === 'ADMIN');
+        tokens.admin = adminLogin.data?.accessToken;
+
+        // ── Phase 3: Products ──
+        setStatus('Running: Products...', 'running');
+        log('═══ Phase 3: Products ═══', 'info');
+        const products = await http('GET', '/api/products');
+        assert('3. Products', 'GET /api/products', products.status === 200, `${products.data?.length || 0} products`);
+        assert('3. Products', 'At least 8 products', (products.data?.length || 0) >= 8);
+
+        const cats = await http('GET', '/api/products/categories');
+        assert('3. Products', 'GET categories', cats.status === 200, `${cats.data?.length || 0} categories`);
+
+        const search = await http('GET', '/api/products?search=USB');
+        assert('3. Products', 'Search works', (search.data?.length || 0) > 0);
+
+        const createProd = await http('POST', '/api/products', { name: 'Browser Test Product', price: 500, stock: 10 }, tokens.admin);
+        assert('3. Products', 'Admin creates product', createProd.status === 201);
+        const testPid = createProd.data?.id;
+
+        const custCreate = await http('POST', '/api/products', { name: 'Hack', price: 1, stock: 1 }, tokens.customer);
+        assert('3. Products', 'Customer cannot create', custCreate.status === 403);
+
+        const delProd = await http('DELETE', `/api/products/${testPid}`, undefined, tokens.admin);
+        assert('3. Products', 'Admin deletes product', delProd.status === 200);
+
+        // ── Phase 4: Cart ──
+        setStatus('Running: Cart...', 'running');
+        log('═══ Phase 4: Cart ═══', 'info');
+        const p1 = products.data[0];
+        const addCart = await http('POST', '/api/cart', { productId: p1.id, quantity: 3 }, tokens.customer);
+        assert('4. Cart', 'Add to cart', addCart.status === 201, `qty=${addCart.data?.quantity}`);
+
+        const getCart = await http('GET', '/api/cart', undefined, tokens.customer);
+        const expectedTotal = p1.price * 3;
+        assert('4. Cart', 'Cart total correct', getCart.data?.totalAmount === expectedTotal, `${expectedTotal} ETB`);
+        assert('4. Cart', 'Backend-calculated price', getCart.data?.totalItems === 1);
+
+        const clearCart = await http('DELETE', '/api/cart', undefined, tokens.customer);
+        assert('4. Cart', 'Clear cart', clearCart.status === 200);
+
+        // ── Phase 5: Delivery ──
+        setStatus('Running: Delivery...', 'running');
+        log('═══ Phase 5: Delivery ═══', 'info');
+        const nearDel = await http('POST', '/api/delivery/fee', { lat: 7.13, lng: 40.02 });
+        assert('5. Delivery', 'Near delivery fee', nearDel.status === 200, `fee=${nearDel.data?.fee} ETB`);
+        assert('5. Delivery', 'Fee > 0', nearDel.data?.fee > 0);
+
+        const farDel = await http('POST', '/api/delivery/fee', { lat: 7.3, lng: 40.2 });
+        assert('5. Delivery', 'Far delivery costs more', farDel.data?.fee > nearDel.data?.fee, `far=${farDel.data?.fee}, near=${nearDel.data?.fee}`);
+
+        const outRange = await http('POST', '/api/delivery/fee', { lat: 10, lng: 50 });
+        assert('5. Delivery', 'Out of range rejected', outRange.status === 400);
+
+        // ── Phase 6: Orders ──
+        setStatus('Running: Orders...', 'running');
+        log('═══ Phase 6: Orders ═══', 'info');
+        await http('POST', '/api/cart', { productId: p1.id, quantity: 2 }, tokens.customer);
+        const order = await http('POST', '/api/orders', { deliveryType: 'PICKUP' }, tokens.customer);
+        assert('6. Orders', 'Create order (PICKUP)', order.status === 201);
+        assert('6. Orders', 'Order is PENDING', order.data?.status === 'PENDING');
+        assert('6. Orders', 'No delivery fee for pickup', order.data?.deliveryFee === 0);
+        const orderId = order.data?.id;
+
+        const emptyOrder = await http('POST', '/api/orders', { deliveryType: 'PICKUP' }, tokens.customer);
+        assert('6. Orders', 'Empty cart order rejected', emptyOrder.status === 400);
+
+        const myOrders = await http('GET', '/api/orders/my-orders', undefined, tokens.customer);
+        assert('6. Orders', 'Get my orders', myOrders.status === 200, `${myOrders.data?.length || 0} orders`);
+
+        const adminOrders = await http('GET', '/api/orders', undefined, tokens.admin);
+        assert('6. Orders', 'Admin views all orders', adminOrders.status === 200);
+
+        const statusUp = await http('PUT', `/api/orders/${orderId}/status`, { status: 'PROCESSING' }, tokens.admin);
+        assert('6. Orders', 'Admin updates status', statusUp.status === 200);
+
+        // ── Phase 7: Payments ──
+        setStatus('Running: Payments...', 'running');
+        log('═══ Phase 7: Payments ═══', 'info');
+        await http('POST', '/api/cart', { productId: p1.id, quantity: 1 }, tokens.customer);
+        const delOrder = await http('POST', '/api/orders', { deliveryType: 'PICKUP' }, tokens.customer);
+        const delOrderId = delOrder.data?.id;
+
+        const payCreate = await http('POST', '/api/payments/create', { orderId: delOrderId }, tokens.customer);
+        assert('7. Payments', 'Create payment session', payCreate.status === 200);
+        assert('7. Payments', 'Payment URL returned', !!payCreate.data?.paymentUrl);
+        const payId = payCreate.data?.paymentId;
+
+        const webhook = await http('POST', '/api/payments/webhook', { tx_ref: `payment_${payId}`, status: 'success', transaction_id: 'TEST_TXN' });
+        assert('7. Payments', 'Webhook processed', webhook.status === 200);
+
+        const verifyPay = await http('GET', `/api/payments/verify/${payId}`, undefined, tokens.customer);
+        assert('7. Payments', 'Payment status SUCCESS', verifyPay.data?.status === 'SUCCESS');
+
+        const paidOrder = await http('GET', `/api/orders/${delOrderId}`, undefined, tokens.customer);
+        assert('7. Payments', 'Order status PAID', paidOrder.data?.status === 'PAID');
+
+        const doublePay = await http('POST', '/api/payments/create', { orderId: delOrderId }, tokens.customer);
+        assert('7. Payments', 'Cannot pay already-paid order', doublePay.status === 400);
+
+        // ── Phase 8: Chat (REST) ──
+        setStatus('Running: Chat Module...', 'running');
+        log('═══ Phase 8: Chat (REST) ═══', 'info');
+        const createChat = await http('POST', '/api/chat', { orderId: delOrderId }, tokens.customer);
+        assert('8. Chat (REST)', 'Create chat', createChat.status === 201);
+        const chatId = createChat.data?.id;
+        assert('8. Chat (REST)', 'Chat linked to order', createChat.data?.orderId === delOrderId);
+
+        const msg1 = await http('POST', '/api/chat/message', { chatId, content: 'Can I get a discount?' }, tokens.customer);
+        assert('8. Chat (REST)', 'Customer sends message', msg1.status === 201);
+        assert('8. Chat (REST)', 'Message content correct', msg1.data?.content === 'Can I get a discount?');
+
+        const msg2 = await http('POST', '/api/chat/message', { chatId, content: 'Yes, 10% off!' }, tokens.admin);
+        assert('8. Chat (REST)', 'Admin responds', msg2.status === 201);
+        assert('8. Chat (REST)', 'Admin role shown', msg2.data?.sender?.role === 'ADMIN');
+
+        const msgs = await http('GET', `/api/chat/${chatId}/messages`, undefined, tokens.customer);
+        assert('8. Chat (REST)', 'Get all messages', msgs.status === 200, `${msgs.data?.length || 0} messages`);
+        assert('8. Chat (REST)', '2 messages returned', (msgs.data?.length || 0) === 2);
+
+        const emptyMsg = await http('POST', '/api/chat/message', { chatId, content: '' }, tokens.customer);
+        assert('8. Chat (REST)', 'Empty message rejected', emptyMsg.status === 400);
+
+        // ── Phase 9: Security ──
+        setStatus('Running: Security Tests...', 'running');
+        log('═══ Phase 9: Security ═══', 'info');
+        const otherReg = await http('POST', '/api/auth/register', { name: 'Other', phone: '+251977777777', password: 'otherpass' });
+        const otherToken = otherReg.data?.accessToken;
+
+        const unauthChat = await http('GET', `/api/chat/order/${delOrderId}`, undefined, otherToken);
+        assert('9. Security', 'Other user cannot access chat', unauthChat.status === 404);
+
+        const unauthCart = await http('GET', '/api/cart');
+        assert('9. Security', 'Unauth cart access blocked', unauthCart.status === 401);
+
+        const unauthOrder = await http('POST', '/api/orders', { deliveryType: 'PICKUP' });
+        assert('9. Security', 'Unauth order creation blocked', unauthOrder.status === 401);
+
+        const badCreate = await http('POST', '/api/auth/register', { name: 'x' });
+        assert('9. Security', 'Missing fields rejected', badCreate.status === 400);
+
+        // ── Phase 10: Socket.io ──
+        setStatus('Running: Socket.io Real-Time...', 'running');
+        log('═══ Phase 10: Socket.io Real-Time ═══', 'info');
+
+        // Load Socket.io client dynamically
+        const socketScript = document.createElement('script');
+        socketScript.src = 'https://cdn.socket.io/4.8.1/socket.io.min.js';
+        document.head.appendChild(socketScript);
+
+        await new Promise(r => setTimeout(r, 2000));
+
+        const cSocket = io(API, { auth: { token: tokens.customer }, transports: ['websocket'] });
+        const aSocket = io(API, { auth: { token: tokens.admin }, transports: ['websocket'] });
+
+        const cConnected = await new Promise(r => { cSocket.on('connect', () => r(true)); cSocket.on('connect_error', () => r(false)); setTimeout(() => r(false), 5000); });
+        assert('10. Socket.io', 'Customer socket connected', cConnected);
+
+        const aConnected = await new Promise(r => { aSocket.on('connect', () => r(true)); aSocket.on('connect_error', () => r(false)); setTimeout(() => r(false), 5000); });
+        assert('10. Socket.io', 'Admin socket connected', aConnected);
+
+        // Create new order + chat for socket test
+        await http('POST', '/api/cart', { productId: p1.id, quantity: 1 }, tokens.customer);
+        const socketOrder = await http('POST', '/api/orders', { deliveryType: 'PICKUP' }, tokens.customer);
+        const socketChat = await http('POST', '/api/chat', { orderId: socketOrder.data?.id }, tokens.customer);
+        const sChatId = socketChat.data?.id;
+
+        cSocket.emit('join:chat', sChatId);
+        aSocket.emit('join:chat', sChatId);
+        assert('10. Socket.io', 'Both joined chat room', true);
+        await new Promise(r => setTimeout(r, 500));
+
+        let receivedMsg = null;
+        aSocket.on('message:new', (msg) => { receivedMsg = msg; });
+
+        cSocket.emit('send:message', { chatId: sChatId, content: 'Hello from browser Socket.io test!' });
+        await new Promise(r => setTimeout(r, 1500));
+
+        assert('10. Socket.io', 'Admin received real-time message', !!receivedMsg);
+        assert('10. Socket.io', 'Message content matches', receivedMsg?.content === 'Hello from browser Socket.io test!');
+
+        let customerReceived = null;
+        cSocket.on('message:new', (msg) => { customerReceived = msg; });
+
+        aSocket.emit('send:message', { chatId: sChatId, content: 'Reply from admin via Socket.io!' });
+        await new Promise(r => setTimeout(r, 1500));
+
+        assert('10. Socket.io', 'Customer received admin response', !!customerReceived);
+        assert('10. Socket.io', 'Admin response content correct', customerReceived?.content === 'Reply from admin via Socket.io!');
+
+        // Typing
+        let typingEvent = null;
+        aSocket.on('typing:user', (data) => { typingEvent = data; });
+        cSocket.emit('typing:start', { chatId: sChatId });
+        await new Promise(r => setTimeout(r, 500));
+        assert('10. Socket.io', 'Typing start received', typingEvent?.isTyping === true);
+
+        cSocket.emit('typing:stop', { chatId: sChatId });
+        await new Promise(r => setTimeout(r, 500));
+        assert('10. Socket.io', 'Typing stop received', typingEvent?.isTyping === false);
+
+        // Unauthorized socket
+        const badSocket = io(API, { auth: { token: 'invalid' }, transports: ['websocket'] });
+        const badConn = await new Promise(r => { badSocket.on('connect', () => r(true)); badSocket.on('connect_error', () => r(false)); setTimeout(() => r(false), 5000); });
+        assert('10. Socket.io', 'Invalid token rejected', !badConn);
+
+        cSocket.disconnect();
+        aSocket.disconnect();
+        badSocket.disconnect();
+
+        // ── Done ──
+        const score = Math.round((passed / totalTests) * 100);
+        setStatus(`✅ Tests Complete: ${passed}/${totalTests} passed (${score}%)`, 'done');
+        log(`\n═══ FINAL RESULT: ${passed}/${totalTests} (${score}%) ═══`, passed === totalTests ? 'pass' : 'fail');
+
+      } catch (err) {
+        setStatus(`❌ Error: ${err.message}`, 'error');
+        log(`❌ FATAL: ${err.message}`, 'fail');
+        console.error(err);
+      }
+
+      btn.disabled = false;
+      btn.textContent = '▶ Run All Tests';
+    }
+  </script>
+</body>
+</html>

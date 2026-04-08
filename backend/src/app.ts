@@ -1,6 +1,7 @@
 import express from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
+import path from "path";
 
 import authRoutes from "./modules/auth/auth.routes";
 import productRoutes from "./modules/products/product.routes";
@@ -11,6 +12,9 @@ import deliveryRoutes from "./modules/delivery/delivery.routes";
 import chatRoutes from "./modules/chat/chat.routes";
 
 const app = express();
+
+// Serve static files (test dashboard)
+app.use(express.static(path.join(__dirname, "..", "public")));
 
 // Global middleware
 app.use(
