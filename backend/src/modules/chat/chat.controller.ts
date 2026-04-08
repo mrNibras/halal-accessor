@@ -17,7 +17,7 @@ export const createChat = async (req: AuthRequest, res: Response) => {
 
 export const getChat = async (req: AuthRequest, res: Response) => {
   try {
-    const { orderId } = req.params;
+    const orderId = req.params.orderId as string;
 
     const chat = await chatService.getChatByOrderId(req.user!.id, orderId, req.user!.role);
 

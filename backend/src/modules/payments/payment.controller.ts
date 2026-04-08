@@ -28,7 +28,7 @@ export const paymentWebhook = async (req: Request, res: Response) => {
 
 export const verifyPaymentController = async (req: Request, res: Response) => {
   try {
-    const { paymentId } = req.params;
+    const paymentId = req.params.paymentId as string;
 
     const payment = await verifyPayment(paymentId);
 
