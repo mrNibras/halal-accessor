@@ -1,0 +1,170 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(uuid())
+  name      String
+  phone     String   @unique
+  password  String
+  role      Role     @default(CUSTOMER)
+  createdAt DateTime @default(now())
+
+  cart      Cart?
+  orders    Order[]
+  messages  Message[]
+}
+
+enum Role {
+  CUSTOMER
+  ADMIN
+}
+
+model Product {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  price       Int
+  stock       Int      @default(0)
+  imageUrl    String?
+  categoryId  String?
+  category    Category? @relation(fields: [categoryId], references: [id])
+  createdAt   DateTime @default(now())
+
+  cartItems   CartItem[]
+  orderItems  OrderItem[]
+}
+
+model Category {
+  id          String    @id @default(uuid())
+  name        String
+  description String?
+  icon        String?
+  createdAt   DateTime  @default(now())
+
+  products    Product[]
+}
+
+model Cart {
+  id        String     @id @default(uuid())
+  userId    String     @unique
+  user      User       @relation(fields: [userId], references: [id])
+  items     CartItem[]
+  updatedAt DateTime   @updatedAt
+}
+
+model CartItem {
+  id        String   @id @default(uuid())
+  cartId    String
+  productId String
+  product   Product  @relation(fields: [productId], references: [id])
+  quantity  Int      @default(1)
+
+  cart      Cart     @relation(fields: [cartId], references: [id])
+}
+
+model Order {
+  id            String      @id @default(uuid())
+  userId        String
+  user          User        @relation(fields: [userId], references: [id])
+
+  totalAmount   Int
+  deliveryFee   Int         @default(0)
+  finalAmount   Int
+
+  status        OrderStatus @default(PENDING)
+  deliveryType  DeliveryType
+
+  latitude      Float?
+  longitude     Float?
+
+  createdAt     DateTime    @default(now())
+
+  items         OrderItem[]
+  payment       Payment?
+  chat          Chat?
+}
+
+enum OrderStatus {
+  PENDING
+  PAID
+  PROCESSING
+  DELIVERED
+  CANCELLED
+}
+
+enum DeliveryType {
+  PICKUP
+  DELIVERY
+}
+
+model OrderItem {
+  id        String   @id @default(uuid())
+  orderId   String
+  productId String
+  product   Product  @relation(fields: [productId], references: [id])
+
+  quantity  Int
+  price     Int
+
+  order     Order    @relation(fields: [orderId], references: [id])
+}
+
+model Payment {
+  id            String        @id @default(uuid())
+  orderId       String        @unique
+  order         Order         @relation(fields: [orderId], references: [id])
+
+  amount        Int
+  status        PaymentStatus @default(PENDING)
+  provider      String        @default("CHAPA")
+  transactionId String?
+  checkoutUrl   String?
+
+  createdAt     DateTime      @default(now())
+  logs          PaymentLog[]
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCESS
+  FAILED
+}
+
+model PaymentLog {
+  id        String   @id @default(uuid())
+  paymentId String
+  payment   Payment  @relation(fields: [paymentId], references: [id])
+
+  userId    String
+  amount    Int
+  status    String
+  message   String?
+  createdAt DateTime @default(now())
+}
+
+model Chat {
+  id        String    @id @default(uuid())
+  orderId   String    @unique
+  order     Order     @relation(fields: [orderId], references: [id])
+
+  messages  Message[]
+  createdAt DateTime  @default(now())
+}
+
+model Message {
+  id           String   @id @default(uuid())
+  chatId       String
+  chat         Chat     @relation(fields: [chatId], references: [id])
+
+  senderId     String
+  sender       User     @relation(fields: [senderId], references: [id])
+
+  content      String
+  createdAt    DateTime @default(now())
+}
