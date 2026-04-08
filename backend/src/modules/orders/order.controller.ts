@@ -24,7 +24,8 @@ export const getUserOrders = async (req: AuthRequest, res: Response) => {
 
 export const getOrder = async (req: AuthRequest, res: Response) => {
   try {
-    const order = await orderService.getOrder(req.user!.id, req.params.id);
+    const orderId = req.params.id as string;
+    const order = await orderService.getOrder(req.user!.id, orderId);
 
     res.json(order);
   } catch (err: any) {
@@ -40,14 +41,14 @@ export const getAllOrders = async (_req: AuthRequest, res: Response) => {
 
 export const updateOrderStatus = async (req: AuthRequest, res: Response) => {
   try {
-    const { id } = req.params;
+    const orderId = req.params.id as string;
     const { status } = req.body;
 
     if (!["PENDING", "PAID", "PROCESSING", "DELIVERED", "CANCELLED"].includes(status)) {
       return res.status(400).json({ message: "Invalid order status" });
     }
 
-    const order = await orderService.updateOrderStatus(id, status);
+    const order = await orderService.updateOrderStatus(orderId, status);
 
     res.json(order);
   } catch (err: any) {
