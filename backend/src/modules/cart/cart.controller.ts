@@ -32,7 +32,7 @@ export const updateItem = async (req: AuthRequest, res: Response) => {
 
 export const removeItem = async (req: AuthRequest, res: Response) => {
   const userId = req.user!.id;
-  const { itemId } = req.params;
+  const itemId = req.params.itemId as string;
 
   await cartService.removeCartItem(userId, itemId);
 
