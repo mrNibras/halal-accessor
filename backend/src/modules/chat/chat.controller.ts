@@ -29,7 +29,7 @@ export const getChat = async (req: AuthRequest, res: Response) => {
 
 export const getMessages = async (req: AuthRequest, res: Response) => {
   try {
-    const { chatId } = req.params;
+    const chatId = req.params.chatId as string;
 
     const messages = await chatService.getChatMessages(req.user!.id, chatId, req.user!.role);
 
