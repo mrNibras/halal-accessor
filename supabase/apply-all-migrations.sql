@@ -220,7 +220,7 @@ CREATE POLICY "Users can view chats for their orders" ON public.chats FOR SELECT
 CREATE POLICY "Admins can view all chats" ON public.chats FOR SELECT USING (true);
 CREATE POLICY "Users can create chats" ON public.chats FOR INSERT WITH CHECK
   (EXISTS (SELECT 1 FROM public.orders WHERE orders.id = chats.order_id AND orders.user_id = auth.uid()));
-CREATE POLICY "Admins can create chats" ON public.chats FOR INSERT USING (true);
+CREATE POLICY "Admins can create chats" ON public.chats FOR INSERT WITH CHECK (true);
 
 -- ─── 4. Seed sample data ───
 
