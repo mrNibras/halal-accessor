@@ -1,14 +1,19 @@
 import { Link } from "react-router-dom";
-import { ShoppingCart, User, LogOut, Menu, X, MessageCircle } from "lucide-react";
+import { ShoppingCart, User, LogOut, Menu, X, MessageCircle, LayoutDashboard } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import { useCart } from "@/hooks/useCart";
 import { useState } from "react";
 
+const ADMIN_EMAILS = ["admin@halalaccessor.com"]; // Check against Supabase user email
+
 const Navbar = () => {
   const { user, signOut } = useAuth();
   const { totalItems } = useCart();
   const [mobileOpen, setMobileOpen] = useState(false);
+
+  // Check if user is admin (by phone or by checking profile role)
+  const isAdmin = user?.user_metadata?.role === "ADMIN" || user?.email === ADMIN_EMAILS[0];
 
   return (
     <nav className="sticky top-0 z-50 glass">
@@ -39,6 +44,13 @@ const Navbar = () => {
             <Link to="/chat">
               <Button variant="ghost" size="icon">
                 <MessageCircle className="h-5 w-5" />
+              </Button>
+            </Link>
+          )}
+          {isAdmin && (
+            <Link to="/admin">
+              <Button variant="ghost" size="icon">
+                <LayoutDashboard className="h-5 w-5" />
               </Button>
             </Link>
           )}
@@ -73,6 +85,11 @@ const Navbar = () => {
           {user && (
             <Link to="/chat" onClick={() => setMobileOpen(false)} className="block text-sm font-medium flex items-center gap-2">
               <MessageCircle className="h-4 w-4" /> Chat
+            </Link>
+          )}
+          {isAdmin && (
+            <Link to="/admin" onClick={() => setMobileOpen(false)} className="block text-sm font-medium flex items-center gap-2">
+              <LayoutDashboard className="h-4 w-4" /> Admin Dashboard
             </Link>
           )}
           {user ? (
