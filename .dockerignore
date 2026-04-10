@@ -1,0 +1,29 @@
+# Dependencies
+node_modules
+bun.lockb
+
+# Build output
+dist
+
+# Environment files (use .env.example or .env.production as template)
+.env
+.env.local
+.env.production
+
+# IDE
+.vscode
+.idea
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Test coverage
+coverage
+
+# Prisma
+prisma/migrations

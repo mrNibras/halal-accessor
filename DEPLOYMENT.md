@@ -34,11 +34,27 @@
 - [ ] Set billing account (required for Maps API)
 
 ## 5. Build & Deploy
-- [ ] Backend: `cd backend && npm run build` → deploy `dist/` folder
+
+### Option A: Docker (Recommended)
+- [ ] Copy `backend/.env.production` to `backend/.env` and fill in all values
+- [ ] Run: `docker compose up -d --build`
+- [ ] This starts: PostgreSQL (5432), Backend API (5000), Frontend nginx (8080)
+- [ ] Run migrations: `docker compose exec backend npx prisma migrate deploy`
+- [ ] Run seed: `docker compose exec backend node dist/seed.js`
+- [ ] Verify: `curl http://localhost:5000/health` and `curl http://localhost:8080`
+
+### Option B: Manual Build
+- [ ] Backend: `cd backend && npm run build` → deploy `dist/` folder + `node_modules`
 - [ ] Frontend: `npm run build` → deploy `dist/` folder via static hosting (Vercel, Netlify, nginx)
 - [ ] Set `NODE_ENV=production` on backend
 - [ ] Configure reverse proxy (nginx/Caddy) for SSL (HTTPS)
 - [ ] Add CORS origin for frontend domain in backend
+
+### Option C: Docker (Production with external DB)
+- [ ] Set `DATABASE_URL` in `backend/.env` to your external PostgreSQL URL
+- [ ] Remove the `db` service from `docker-compose.yml` (or comment it out)
+- [ ] Run: `docker compose up -d --build backend frontend`
+- [ ] Run migrations: `docker compose exec backend npx prisma migrate deploy`
 
 ## 6. Post-Deployment
 - [ ] Test health check: `GET https://YOUR_API_DOMAIN.com/health`
