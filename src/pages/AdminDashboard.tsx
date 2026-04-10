@@ -1,7 +1,8 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
-import { supabase } from "@/integrations/supabase/client";
+import { productsApi, ordersApi, chatApi, authApi } from "@/lib/api";
+import { io, Socket } from "socket.io-client";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -16,7 +17,7 @@ import { toast } from "sonner";
 import {
   Package, ShoppingCart, MessageCircle, Plus, Edit, Trash2, RefreshCw,
   TrendingUp, Users, DollarSign, Clock, ChevronDown, ChevronUp, Send,
-  MessageSquare, Eye
+  MessageSquare
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
@@ -28,51 +29,55 @@ interface Product {
   description: string | null;
   price: number;
   stock: number;
-  image_url: string | null;
-  category_id: string | null;
-  is_featured: boolean | null;
-  created_at: string;
+  imageUrl: string | null;
+  categoryId: string | null;
+  createdAt: string;
 }
 
 interface OrderItem {
   id: string;
-  order_id: string;
-  product_id: string;
+  orderId: string;
+  productId: string;
   quantity: number;
   price: number;
-  products: { name: string } | null;
+  product: { name: string };
 }
 
 interface Order {
   id: string;
-  user_id: string;
-  total_amount: number;
-  delivery_fee: number;
-  final_amount: number;
+  userId: string;
+  totalAmount: number;
+  deliveryFee: number;
+  finalAmount: number;
   status: string;
-  delivery_type: string;
+  deliveryType: string;
   latitude: number | null;
   longitude: number | null;
-  created_at: string;
-  order_items: OrderItem[];
-  profiles: { display_name: string | null; phone: string | null } | null;
+  createdAt: string;
+  items: OrderItem[];
+  user: { name: string; phone: string };
 }
 
 interface ChatMessage {
   id: string;
+  chatId: string;
+  senderId: string;
   content: string;
-  sender_id: string;
-  created_at: string;
-  profiles: { display_name: string | null } | null;
+  createdAt: string;
+  sender: { id: string; name: string; role: string };
 }
 
-interface ChatThread {
-  conversation_id: string;
-  last_message: string | null;
-  last_message_at: string | null;
-  customer_name: string;
-  customer_id: string;
-  messages: ChatMessage[];
+interface ChatSummary {
+  id: string;
+  orderId: string;
+  createdAt: string;
+  lastMessage: ChatMessage | null;
+  order: {
+    id: string;
+    finalAmount: number;
+    status: string;
+    user: { name: string; phone: string };
+  };
 }
 
 const AdminDashboard = () => {
@@ -85,113 +90,99 @@ const AdminDashboard = () => {
   const [totalRevenue, setTotalRevenue] = useState(0);
   const [totalOrders, setTotalOrders] = useState(0);
   const [totalProducts, setTotalProducts] = useState(0);
-  const [totalCustomers, setTotalCustomers] = useState(0);
 
   // Products
   const [products, setProducts] = useState<Product[]>([]);
   const [showProductDialog, setShowProductDialog] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
-  const [productForm, setProductForm] = useState({ name: "", description: "", price: "", stock: "", image_url: "" });
+  const [productForm, setProductForm] = useState({ name: "", description: "", price: "", stock: "", imageUrl: "" });
 
   // Orders
   const [orders, setOrders] = useState<Order[]>([]);
   const [expandedOrder, setExpandedOrder] = useState<string | null>(null);
 
   // Chats
-  const [chatThreads, setChatThreads] = useState<ChatThread[]>([]);
+  const [chatThreads, setChatThreads] = useState<ChatSummary[]>([]);
   const [activeChat, setActiveChat] = useState<string | null>(null);
   const [newMessage, setNewMessage] = useState("");
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [socket, setSocket] = useState<Socket | null>(null);
 
   useEffect(() => {
     if (!user) { navigate("/auth"); return; }
+    if (user.role !== "ADMIN") { navigate("/"); toast.error("Access denied"); return; }
     loadData();
   }, [user]);
 
+  // Socket.io setup for admin chat
+  useEffect(() => {
+    if (!user || user.role !== "ADMIN") return;
+    const token = authApi.getToken();
+    const s = io(import.meta.env.VITE_API_URL || "http://localhost:5000", { auth: { token } });
+
+    s.on("message:new", (msg: ChatMessage) => {
+      setChatThreads((prev) =>
+        prev.map((t) =>
+          t.id === msg.chatId ? { ...t, lastMessage: msg } : t
+        )
+      );
+      // If viewing this chat, append message
+      if (activeChat === msg.chatId) {
+        setChatThreads((prev) =>
+          prev.map((t) =>
+            t.id === msg.chatId
+              ? { ...t, messages: [...(t as any).messages || [], msg] }
+              : t
+          )
+        );
+      }
+    });
+
+    setSocket(s);
+    return () => { s.disconnect(); };
+  }, [user]);
+
+  // Join/leave active chat
+  useEffect(() => {
+    if (!socket || !activeChat) return;
+    socket.emit("join:chat", activeChat);
+    return () => { socket.emit("leave:chat", activeChat); };
+  }, [activeChat, socket]);
+
   const loadData = async () => {
     setLoading(true);
-    await Promise.all([loadStats(), loadProducts(), loadOrders(), loadChats()]);
-    setLoading(false);
+    try {
+      await Promise.all([loadStats(), loadProducts(), loadOrders(), loadChats()]);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const loadStats = async () => {
-    const { data: orders } = await supabase.from("orders").select("final_amount, status");
-    const { data: products } = await supabase.from("products").select("id");
-    const { data: users } = await supabase.from("profiles").select("user_id");
+    const allOrders = await ordersApi.getAll();
+    const allProducts = await productsApi.getAll();
 
-    setTotalRevenue(orders?.filter(o => o.status === "PAID" || o.status === "DELIVERED").reduce((s, o) => s + (o.final_amount || 0), 0) || 0);
-    setTotalOrders(orders?.length || 0);
-    setTotalProducts(products?.length || 0);
-    setTotalCustomers(users?.length || 0);
+    setTotalRevenue(
+      allOrders
+        .filter((o: any) => o.status === "PAID" || o.status === "DELIVERED")
+        .reduce((s: number, o: any) => s + (o.finalAmount || 0), 0)
+    );
+    setTotalOrders(allOrders.length);
+    setTotalProducts(allProducts.length);
   };
 
   const loadProducts = async () => {
-    const { data } = await supabase.from("products").select("*").order("created_at", { ascending: false });
-    setProducts(data || []);
+    const data = await productsApi.getAll();
+    setProducts(data);
   };
 
   const loadOrders = async () => {
-    const { data } = await supabase
-      .from("orders")
-      .select(`
-        *,
-        profiles!orders_user_id_fkey(display_name, phone),
-        order_items(
-          id, order_id, product_id, quantity, price,
-          products!order_items_product_id_fkey(name)
-        )
-      `)
-      .order("created_at", { ascending: false });
-    setOrders(data || []);
+    const data = await ordersApi.getAll();
+    setOrders(data);
   };
 
   const loadChats = async () => {
-    // Get all conversations with their latest messages
-    const { data: participants } = await supabase
-      .from("participants")
-      .select(`
-        conversation_id,
-        user_id,
-        profiles!participants_user_id_fkey(display_name)
-      `);
-
-    const { data: messages } = await supabase
-      .from("messages")
-      .select(`
-        id, content, sender_id, conversation_id, created_at,
-        profiles!messages_sender_id_fkey(display_name)
-      `)
-      .order("created_at", { ascending: true });
-
-    // Group by conversation
-    const threadMap = new Map<string, ChatThread>();
-    if (participants) {
-      for (const p of participants) {
-        if (!threadMap.has(p.conversation_id)) {
-          threadMap.set(p.conversation_id, {
-            conversation_id: p.conversation_id,
-            last_message: null,
-            last_message_at: null,
-            customer_name: p.profiles?.display_name || "Customer",
-            customer_id: p.user_id,
-            messages: [],
-          });
-        }
-      }
-    }
-    if (messages) {
-      for (const m of messages) {
-        const thread = threadMap.get(m.conversation_id);
-        if (thread) {
-          thread.messages.push(m);
-          thread.last_message = m.content;
-          thread.last_message_at = m.created_at;
-        }
-      }
-    }
-    setChatThreads(Array.from(threadMap.values()).sort((a, b) =>
-      (b.last_message_at || "").localeCompare(a.last_message_at || "")
-    ));
+    const data = await chatApi.getChats();
+    setChatThreads(data);
   };
 
   // ─── Product CRUD ───
@@ -203,11 +194,11 @@ const AdminDashboard = () => {
         description: product.description || "",
         price: String(product.price),
         stock: String(product.stock),
-        image_url: product.image_url || "",
+        imageUrl: product.imageUrl || "",
       });
     } else {
       setEditingProduct(null);
-      setProductForm({ name: "", description: "", price: "", stock: "", image_url: "" });
+      setProductForm({ name: "", description: "", price: "", stock: "", imageUrl: "" });
     }
     setShowProductDialog(true);
   };
@@ -219,61 +210,54 @@ const AdminDashboard = () => {
     }
     const data = {
       name: productForm.name,
-      description: productForm.description || null,
+      description: productForm.description || undefined,
       price: parseInt(productForm.price),
       stock: parseInt(productForm.stock),
-      image_url: productForm.image_url || null,
+      imageUrl: productForm.imageUrl || undefined,
     };
 
-    if (editingProduct) {
-      const { error } = await supabase.from("products").update(data).eq("id", editingProduct.id);
-      if (error) { toast.error(error.message); return; }
-      toast.success("Product updated!");
-    } else {
-      const { error } = await supabase.from("products").insert(data);
-      if (error) { toast.error(error.message); return; }
-      toast.success("Product created!");
+    try {
+      if (editingProduct) {
+        await productsApi.update(editingProduct.id, data);
+        toast.success("Product updated!");
+      } else {
+        await productsApi.create(data);
+        toast.success("Product created!");
+      }
+      setShowProductDialog(false);
+      loadProducts();
+    } catch (err: any) {
+      toast.error(err.message || "Failed to save product");
     }
-    setShowProductDialog(false);
-    loadProducts();
   };
 
   const deleteProduct = async (id: string) => {
-    const { error } = await supabase.from("products").delete().eq("id", id);
-    if (error) { toast.error(error.message); return; }
-    toast.success("Product deleted");
-    loadProducts();
+    try {
+      await productsApi.delete(id);
+      toast.success("Product deleted");
+      loadProducts();
+    } catch (err: any) {
+      toast.error(err.message || "Failed to delete product");
+    }
   };
 
   // ─── Order Status Update ───
   const updateOrderStatus = async (orderId: string, status: string) => {
-    const { error } = await supabase.from("orders").update({ status }).eq("id", orderId);
-    if (error) { toast.error(error.message); return; }
-    toast.success(`Order status updated to ${status}`);
-    loadOrders();
-    loadStats();
+    try {
+      await ordersApi.updateStatus(orderId, status);
+      toast.success(`Order status updated to ${status}`);
+      loadOrders();
+      loadStats();
+    } catch (err: any) {
+      toast.error(err.message || "Failed to update order");
+    }
   };
 
   // ─── Chat ───
   const sendMessage = async () => {
-    if (!activeChat || !newMessage.trim() || !user) return;
-    const { error } = await supabase.from("messages").insert({
-      conversation_id: activeChat,
-      sender_id: user.id,
-      content: newMessage.trim(),
-    });
-    if (error) { toast.error(error.message); return; }
+    if (!activeChat || !newMessage.trim() || !socket) return;
+    socket.emit("send:message", { chatId: activeChat, content: newMessage.trim() });
     setNewMessage("");
-    // Refresh messages
-    const { data } = await supabase
-      .from("messages")
-      .select(`*, profiles!messages_sender_id_fkey(display_name)`)
-      .eq("conversation_id", activeChat)
-      .order("created_at", { ascending: true });
-    setChatThreads(prev => prev.map(t =>
-      t.conversation_id === activeChat ? { ...t, messages: data || [], last_message: newMessage.trim(), last_message_at: new Date().toISOString() } : t
-    ));
-    setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
   };
 
   const statusColors: Record<string, string> = {
@@ -346,12 +330,12 @@ const AdminDashboard = () => {
               </Card>
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between pb-2">
-                  <CardTitle className="text-sm font-medium">Customers</CardTitle>
+                  <CardTitle className="text-sm font-medium">Active Chats</CardTitle>
                   <Users className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold">{totalCustomers}</div>
-                  <p className="text-xs text-muted-foreground">Registered users</p>
+                  <div className="text-2xl font-bold">{chatThreads.length}</div>
+                  <p className="text-xs text-muted-foreground">Conversations</p>
                 </CardContent>
               </Card>
             </div>
@@ -365,10 +349,10 @@ const AdminDashboard = () => {
                     <div key={order.id} className="flex items-center justify-between py-2 border-b border-border last:border-0">
                       <div>
                         <p className="font-medium text-sm">Order #{order.id.slice(0, 8)}</p>
-                        <p className="text-xs text-muted-foreground">{order.profiles?.display_name || "Unknown"} · {formatDistanceToNow(new Date(order.created_at), { addSuffix: true })}</p>
+                        <p className="text-xs text-muted-foreground">{order.user.name} · {formatDistanceToNow(new Date(order.createdAt), { addSuffix: true })}</p>
                       </div>
                       <div className="flex items-center gap-3">
-                        <span className="font-medium text-sm">{order.final_amount.toLocaleString()} ETB</span>
+                        <span className="font-medium text-sm">{order.finalAmount.toLocaleString()} ETB</span>
                         <Badge className={cn("text-xs", statusColors[order.status] || "")}>{order.status}</Badge>
                       </div>
                     </div>
@@ -398,7 +382,7 @@ const AdminDashboard = () => {
                       <Input type="number" placeholder="Price (ETB)" value={productForm.price} onChange={e => setProductForm(p => ({ ...p, price: e.target.value }))} />
                       <Input type="number" placeholder="Stock" value={productForm.stock} onChange={e => setProductForm(p => ({ ...p, stock: e.target.value }))} />
                     </div>
-                    <Input placeholder="Image URL (optional)" value={productForm.image_url} onChange={e => setProductForm(p => ({ ...p, image_url: e.target.value }))} />
+                    <Input placeholder="Image URL (optional)" value={productForm.imageUrl} onChange={e => setProductForm(p => ({ ...p, imageUrl: e.target.value }))} />
                     <Button onClick={saveProduct} className="w-full">{editingProduct ? "Update" : "Create"}</Button>
                   </div>
                 </DialogContent>
@@ -448,12 +432,12 @@ const AdminDashboard = () => {
                         <div>
                           <p className="font-medium text-sm">Order #{order.id.slice(0, 8)}</p>
                           <p className="text-xs text-muted-foreground">
-                            {order.profiles?.display_name || "Unknown"} · {order.profiles?.phone || ""} · {formatDistanceToNow(new Date(order.created_at), { addSuffix: true })}
+                            {order.user.name} · {order.user.phone} · {formatDistanceToNow(new Date(order.createdAt), { addSuffix: true })}
                           </p>
                         </div>
                       </div>
                       <div className="flex items-center gap-3">
-                        <span className="font-bold">{order.final_amount.toLocaleString()} ETB</span>
+                        <span className="font-bold">{order.finalAmount.toLocaleString()} ETB</span>
                         <Badge className={cn("text-xs", statusColors[order.status] || "")}>{order.status}</Badge>
                         <Select defaultValue={order.status} onValueChange={(val) => updateOrderStatus(order.id, val)}>
                           <SelectTrigger className="w-36 h-8 text-xs">
@@ -473,10 +457,10 @@ const AdminDashboard = () => {
                     {expandedOrder === order.id && (
                       <div className="mt-3 pt-3 border-t border-border space-y-3">
                         <div className="grid grid-cols-2 gap-2 text-sm">
-                          <div><span className="text-muted-foreground">Delivery:</span> <Badge variant="outline" className="ml-1 text-xs">{order.delivery_type}</Badge></div>
-                          <div><span className="text-muted-foreground">Subtotal:</span> {order.total_amount.toLocaleString()} ETB</div>
-                          <div><span className="text-muted-foreground">Delivery Fee:</span> {order.delivery_fee.toLocaleString()} ETB</div>
-                          <div><span className="text-muted-foreground">Final:</span> <strong>{order.final_amount.toLocaleString()} ETB</strong></div>
+                          <div><span className="text-muted-foreground">Delivery:</span> <Badge variant="outline" className="ml-1 text-xs">{order.deliveryType}</Badge></div>
+                          <div><span className="text-muted-foreground">Subtotal:</span> {order.totalAmount.toLocaleString()} ETB</div>
+                          <div><span className="text-muted-foreground">Delivery Fee:</span> {order.deliveryFee.toLocaleString()} ETB</div>
+                          <div><span className="text-muted-foreground">Final:</span> <strong>{order.finalAmount.toLocaleString()} ETB</strong></div>
                           {order.latitude && order.longitude && (
                             <div className="col-span-2"><span className="text-muted-foreground">Location:</span> {order.latitude.toFixed(4)}, {order.longitude.toFixed(4)}</div>
                           )}
@@ -484,9 +468,9 @@ const AdminDashboard = () => {
                         <div>
                           <p className="text-sm font-medium mb-1">Items:</p>
                           <div className="space-y-1">
-                            {order.order_items?.map(item => (
+                            {order.items?.map(item => (
                               <div key={item.id} className="flex justify-between text-xs">
-                                <span>{item.products?.name || "Unknown"} × {item.quantity}</span>
+                                <span>{item.product.name} × {item.quantity}</span>
                                 <span>{(item.price * item.quantity).toLocaleString()} ETB</span>
                               </div>
                             ))}
@@ -513,24 +497,24 @@ const AdminDashboard = () => {
                   <div className="px-2 space-y-1">
                     {chatThreads.map(thread => (
                       <button
-                        key={thread.conversation_id}
-                        onClick={() => setActiveChat(thread.conversation_id)}
+                        key={thread.id}
+                        onClick={() => setActiveChat(thread.id)}
                         className={cn(
                           "w-full text-left p-3 rounded-lg transition-colors",
-                          activeChat === thread.conversation_id ? "bg-primary/10 text-primary" : "hover:bg-muted"
+                          activeChat === thread.id ? "bg-primary/10 text-primary" : "hover:bg-muted"
                         )}
                       >
                         <div className="flex items-center gap-2">
                           <Avatar className="h-8 w-8">
-                            <AvatarFallback className="text-xs bg-muted">{thread.customer_name.charAt(0)}</AvatarFallback>
+                            <AvatarFallback className="text-xs bg-muted">{thread.order.user.name.charAt(0)}</AvatarFallback>
                           </Avatar>
                           <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium truncate">{thread.customer_name}</p>
-                            {thread.last_message && (
-                              <p className="text-xs text-muted-foreground truncate">{thread.last_message}</p>
+                            <p className="text-sm font-medium truncate">{thread.order.user.name}</p>
+                            {thread.lastMessage && (
+                              <p className="text-xs text-muted-foreground truncate">{thread.lastMessage.content}</p>
                             )}
                           </div>
-                          {thread.last_message_at && (
+                          {thread.lastMessage && (
                             <Clock className="h-3 w-3 text-muted-foreground flex-shrink-0" />
                           )}
                         </div>
@@ -549,24 +533,14 @@ const AdminDashboard = () => {
                   <>
                     <CardHeader className="pb-3">
                       <CardTitle className="text-sm">
-                        Chat with {chatThreads.find(t => t.conversation_id === activeChat)?.customer_name || "Customer"}
+                        Chat with {chatThreads.find(t => t.id === activeChat)?.order.user.name || "Customer"}
+                        <span className="text-xs text-muted-foreground ml-2">
+                          Order #{chatThreads.find(t => t.id === activeChat)?.orderId.slice(0, 8)}
+                        </span>
                       </CardTitle>
                     </CardHeader>
                     <ScrollArea className="flex-1 px-4" style={{ maxHeight: "calc(100vh - 380px)" }}>
-                      {chatThreads.find(t => t.conversation_id === activeChat)?.messages.map(msg => {
-                        const isAdmin = msg.sender_id === user?.id;
-                        return (
-                          <div key={msg.id} className={cn("flex gap-2 mb-3", isAdmin ? "flex-row-reverse" : "flex-row")}>
-                            <div className={cn("max-w-[75%] rounded-lg px-3 py-2 text-sm", isAdmin ? "bg-primary text-primary-foreground" : "bg-muted")}>
-                              <p>{msg.content}</p>
-                              <p className={cn("text-xs mt-1", isAdmin ? "text-primary-foreground/60" : "text-muted-foreground")}>
-                                {formatDistanceToNow(new Date(msg.created_at), { addSuffix: true })}
-                              </p>
-                            </div>
-                          </div>
-                        );
-                      })}
-                      <div ref={messagesEndRef} />
+                      <ChatMessages chatId={activeChat} />
                     </ScrollArea>
                     <div className="border-t border-border p-3 flex gap-2">
                       <Textarea
@@ -598,5 +572,40 @@ const AdminDashboard = () => {
     </div>
   );
 };
+
+// Sub-component for displaying messages in admin chat
+function ChatMessages({ chatId }: { chatId: string }) {
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const { user } = useAuth();
+  const endRef = useState<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    chatApi.getMessages(chatId).then(setMessages).catch(() => {});
+  }, [chatId]);
+
+  return (
+    <div>
+      {messages.map(msg => {
+        const isOwn = msg.senderId === user?.id;
+        return (
+          <div key={msg.id} className={cn("flex gap-2 mb-3", isOwn ? "flex-row-reverse" : "flex-row")}>
+            <div className={cn("max-w-[75%] rounded-lg px-3 py-2 text-sm break-words",
+              isOwn ? "bg-primary text-primary-foreground" : "bg-muted"
+            )}>
+              <p>{msg.content}</p>
+              <p className={cn("text-xs mt-1", isOwn ? "text-primary-foreground/60" : "text-muted-foreground")}>
+                {formatDistanceToNow(new Date(msg.createdAt), { addSuffix: true })}
+              </p>
+            </div>
+          </div>
+        );
+      })}
+      {messages.length === 0 && (
+        <p className="text-xs text-muted-foreground text-center py-8">No messages yet</p>
+      )}
+      <div ref={endRef as any} />
+    </div>
+  );
+}
 
 export default AdminDashboard;

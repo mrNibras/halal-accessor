@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { productsApi } from "@/lib/api";
 import { Smartphone, Zap, Headphones, Shield, BatteryCharging, LayoutGrid } from "lucide-react";
 
 const iconMap: Record<string, React.ReactNode> = {
@@ -18,11 +18,7 @@ interface Props {
 const CategoryFilter = ({ selected, onSelect }: Props) => {
   const { data: categories = [] } = useQuery({
     queryKey: ["categories"],
-    queryFn: async () => {
-      const { data, error } = await supabase.from("categories").select("*");
-      if (error) throw error;
-      return data;
-    },
+    queryFn: () => productsApi.getCategories(),
   });
 
   return (

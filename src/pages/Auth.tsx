@@ -9,9 +9,9 @@ import { Eye, EyeOff } from "lucide-react";
 
 const Auth = () => {
   const [isSignUp, setIsSignUp] = useState(false);
-  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
-  const [displayName, setDisplayName] = useState("");
+  const [name, setName] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const { signIn, signUp, user } = useAuth();
@@ -27,10 +27,11 @@ const Auth = () => {
     setLoading(true);
     try {
       if (isSignUp) {
-        await signUp(email, password, displayName);
-        toast.success("Account created! Check your email to verify.");
+        await signUp(name, phone, password);
+        toast.success("Account created! Welcome to HalalAccessor.");
+        navigate("/");
       } else {
-        await signIn(email, password);
+        await signIn(phone, password);
         toast.success("Welcome back!");
         navigate("/");
       }
@@ -62,21 +63,21 @@ const Auth = () => {
               <Label htmlFor="name">Full Name</Label>
               <Input
                 id="name"
-                value={displayName}
-                onChange={(e) => setDisplayName(e.target.value)}
+                value={name}
+                onChange={(e) => setName(e.target.value)}
                 placeholder="Your name"
                 required
               />
             </div>
           )}
           <div className="space-y-2">
-            <Label htmlFor="email">Email</Label>
+            <Label htmlFor="phone">Phone Number</Label>
             <Input
-              id="email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@example.com"
+              id="phone"
+              type="tel"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              placeholder="+2519XXXXXXXX"
               required
             />
           </div>

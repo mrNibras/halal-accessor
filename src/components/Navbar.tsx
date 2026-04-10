@@ -5,15 +5,12 @@ import { useAuth } from "@/hooks/useAuth";
 import { useCart } from "@/hooks/useCart";
 import { useState } from "react";
 
-const ADMIN_EMAILS = ["admin@halalaccessor.com"]; // Check against Supabase user email
-
 const Navbar = () => {
   const { user, signOut } = useAuth();
   const { totalItems } = useCart();
   const [mobileOpen, setMobileOpen] = useState(false);
 
-  // Check if user is admin (by phone or by checking profile role)
-  const isAdmin = user?.user_metadata?.role === "ADMIN" || user?.email === ADMIN_EMAILS[0];
+  const isAdmin = user?.role === "ADMIN";
 
   return (
     <nav className="sticky top-0 z-50 glass">
@@ -30,16 +27,18 @@ const Navbar = () => {
           <Link to="/" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
             Products
           </Link>
-          <Link to="/cart" className="relative">
-            <Button variant="ghost" size="icon">
-              <ShoppingCart className="h-5 w-5" />
-              {totalItems > 0 && (
-                <span className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-accent text-accent-foreground text-xs font-bold flex items-center justify-center">
-                  {totalItems}
-                </span>
-              )}
-            </Button>
-          </Link>
+          {user && (
+            <Link to="/cart" className="relative">
+              <Button variant="ghost" size="icon">
+                <ShoppingCart className="h-5 w-5" />
+                {totalItems > 0 && (
+                  <span className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-accent text-accent-foreground text-xs font-bold flex items-center justify-center">
+                    {totalItems}
+                  </span>
+                )}
+              </Button>
+            </Link>
+          )}
           {user && (
             <Link to="/chat">
               <Button variant="ghost" size="icon">
@@ -79,9 +78,11 @@ const Navbar = () => {
           <Link to="/" onClick={() => setMobileOpen(false)} className="block text-sm font-medium">
             Products
           </Link>
-          <Link to="/cart" onClick={() => setMobileOpen(false)} className="block text-sm font-medium">
-            Cart {totalItems > 0 && `(${totalItems})`}
-          </Link>
+          {user && (
+            <Link to="/cart" onClick={() => setMobileOpen(false)} className="block text-sm font-medium">
+              Cart {totalItems > 0 && `(${totalItems})`}
+            </Link>
+          )}
           {user && (
             <Link to="/chat" onClick={() => setMobileOpen(false)} className="block text-sm font-medium flex items-center gap-2">
               <MessageCircle className="h-4 w-4" /> Chat

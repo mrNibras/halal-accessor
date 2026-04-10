@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { productsApi } from "@/lib/api";
 import { Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import CategoryFilter from "./CategoryFilter";
@@ -12,13 +12,7 @@ const ProductGrid = () => {
 
   const { data: products = [], isLoading } = useQuery({
     queryKey: ["products", categoryId],
-    queryFn: async () => {
-      let query = supabase.from("products").select("*").order("is_featured", { ascending: false });
-      if (categoryId) query = query.eq("category_id", categoryId);
-      const { data, error } = await query;
-      if (error) throw error;
-      return data;
-    },
+    queryFn: () => productsApi.getAll(categoryId ? { category: categoryId } : undefined),
   });
 
   const filtered = products.filter((p) =>

@@ -1,16 +1,24 @@
 import { createContext, useContext, ReactNode } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { cartApi } from "@/lib/api";
 import { useAuth } from "./useAuth";
 import { toast } from "sonner";
-import type { Tables } from "@/integrations/supabase/types";
 
-type CartItemWithProduct = Tables<"cart_items"> & {
-  products: Tables<"products">;
-};
+interface CartItem {
+  id: string;
+  productId: string;
+  quantity: number;
+  product: {
+    id: string;
+    name: string;
+    price: number;
+    stock: number;
+    imageUrl: string | null;
+  };
+}
 
 interface CartContextType {
-  items: CartItemWithProduct[];
+  items: CartItem[];
   isLoading: boolean;
   totalItems: number;
   totalPrice: number;
@@ -25,37 +33,18 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
   const { user } = useAuth();
   const queryClient = useQueryClient();
 
-  const { data: items = [], isLoading } = useQuery({
-    queryKey: ["cart", user?.id],
-    queryFn: async () => {
-      if (!user) return [];
-      const { data, error } = await supabase
-        .from("cart_items")
-        .select("*, products(*)")
-        .eq("user_id", user.id);
-      if (error) throw error;
-      return data as CartItemWithProduct[];
-    },
+  const { data: cart, isLoading } = useQuery({
+    queryKey: ["cart"],
+    queryFn: () => cartApi.get(),
     enabled: !!user,
+    select: (data) => data as { items: CartItem[] },
   });
 
+  const items: CartItem[] = cart?.items || [];
+
   const addMutation = useMutation({
-    mutationFn: async ({ productId, quantity = 1 }: { productId: string; quantity?: number }) => {
-      if (!user) throw new Error("Must be logged in");
-      const existing = items.find((i) => i.product_id === productId);
-      if (existing) {
-        const { error } = await supabase
-          .from("cart_items")
-          .update({ quantity: existing.quantity + quantity })
-          .eq("id", existing.id);
-        if (error) throw error;
-      } else {
-        const { error } = await supabase
-          .from("cart_items")
-          .insert({ user_id: user.id, product_id: productId, quantity });
-        if (error) throw error;
-      }
-    },
+    mutationFn: ({ productId, quantity = 1 }: { productId: string; quantity?: number }) =>
+      cartApi.addItem(productId, quantity),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["cart"] });
       toast.success("Added to cart");
@@ -64,22 +53,13 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
   });
 
   const updateMutation = useMutation({
-    mutationFn: async ({ itemId, quantity }: { itemId: string; quantity: number }) => {
-      if (quantity < 1) return;
-      const { error } = await supabase
-        .from("cart_items")
-        .update({ quantity })
-        .eq("id", itemId);
-      if (error) throw error;
-    },
+    mutationFn: ({ itemId, quantity }: { itemId: string; quantity: number }) =>
+      cartApi.updateItem(itemId, quantity),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["cart"] }),
   });
 
   const removeMutation = useMutation({
-    mutationFn: async (itemId: string) => {
-      const { error } = await supabase.from("cart_items").delete().eq("id", itemId);
-      if (error) throw error;
-    },
+    mutationFn: cartApi.removeItem,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["cart"] });
       toast.success("Removed from cart");
@@ -87,7 +67,7 @@ export const CartProvider = ({ children }: { children: ReactNode }) => {
   });
 
   const totalItems = items.reduce((sum, i) => sum + i.quantity, 0);
-  const totalPrice = items.reduce((sum, i) => sum + i.products.price * i.quantity, 0);
+  const totalPrice = items.reduce((sum, i) => sum + i.product.price * i.quantity, 0);
 
   return (
     <CartContext.Provider

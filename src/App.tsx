@@ -11,6 +11,7 @@ import Cart from "./pages/Cart.tsx";
 import Chat from "./pages/Chat.tsx";
 import AdminDashboard from "./pages/AdminDashboard.tsx";
 import OrderDetail from "./pages/OrderDetail.tsx";
+import PaymentCallback from "./pages/PaymentCallback.tsx";
 import NotFound from "./pages/NotFound.tsx";
 
 const queryClient = new QueryClient();
@@ -30,6 +31,7 @@ const App = () => (
               <Route path="/chat" element={<Chat />} />
               <Route path="/admin" element={<AdminDashboard />} />
               <Route path="/orders/:orderId" element={<OrderDetail />} />
+              <Route path="/payment/callback" element={<PaymentCallback />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </BrowserRouter>
