@@ -1,4 +1,33 @@
-# 🐳 Docker Quick Start
+# 🐳 Docker & CI/CD Quick Start
+
+## CI/CD Pipeline (Automated)
+
+This project has 3 GitHub Actions workflows:
+
+| Workflow | Trigger | What it does |
+|---|---|---|
+| `ci.yml` | Push / PR to `main` | Lint → Build → Test (frontend + backend) |
+| `deploy.yml` | Push to `main` or `v*` tag | Build & push Docker images to GHCR |
+| `deploy-prod.yml` | After `deploy.yml` succeeds | SSH deploy to production server |
+
+### Setup CI/CD
+
+1. **Add repository secrets** (Settings → Secrets → Actions):
+   - `SERVER_HOST` — Production server IP
+   - `SERVER_USER` — SSH username
+   - `SERVER_SSH_KEY` — SSH private key
+
+2. **Add repository variables** (Settings → Variables → Actions):
+   - `VITE_API_URL` — Production backend URL
+
+3. **Create `production` environment** (Settings → Environments):
+   - Add protection rules if you want approval before deploy
+
+4. Push to `main` — CI runs automatically. Tag `v1.0.0` for release.
+
+---
+
+## Docker (Manual)
 
 ## Development (Local)
 

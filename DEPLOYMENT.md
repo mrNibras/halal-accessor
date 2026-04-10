@@ -35,7 +35,29 @@
 
 ## 5. Build & Deploy
 
-### Option A: Docker (Recommended)
+### Option A: CI/CD Pipeline (Recommended)
+- [ ] Push to `main` branch → triggers CI workflow (build + test)
+- [ ] On success → Docker images pushed to GHCR (`ghcr.io/your-org/halal-accessor-frontend` + `backend`)
+- [ ] Deploy to production: Go to **Actions → Deploy to Production → Run workflow**
+- [ ] Or tag a release: `git tag v1.0.0 && git push origin v1.0.0`
+
+**Required GitHub Repository Secrets:**
+| Secret | Purpose |
+|---|---|
+| `SERVER_HOST` | Production server IP or hostname |
+| `SERVER_USER` | SSH username (e.g., `deploy`) |
+| `SERVER_SSH_KEY` | SSH private key for passwordless login |
+
+**Required GitHub Repository Variables:**
+| Variable | Purpose |
+|---|---|
+| `VITE_API_URL` | Production backend URL (e.g., `https://api.halalaccessor.com`) |
+
+**Required GitHub Environments:**
+- Create `production` environment in **Settings → Environments**
+- Add protection rules (require approval) if desired
+
+### Option B: Docker Compose (Manual)
 - [ ] Copy `backend/.env.production` to `backend/.env` and fill in all values
 - [ ] Run: `docker compose up -d --build`
 - [ ] This starts: PostgreSQL (5432), Backend API (5000), Frontend nginx (8080)
@@ -43,14 +65,14 @@
 - [ ] Run seed: `docker compose exec backend node dist/seed.js`
 - [ ] Verify: `curl http://localhost:5000/health` and `curl http://localhost:8080`
 
-### Option B: Manual Build
+### Option C: Manual Build
 - [ ] Backend: `cd backend && npm run build` → deploy `dist/` folder + `node_modules`
 - [ ] Frontend: `npm run build` → deploy `dist/` folder via static hosting (Vercel, Netlify, nginx)
 - [ ] Set `NODE_ENV=production` on backend
 - [ ] Configure reverse proxy (nginx/Caddy) for SSL (HTTPS)
 - [ ] Add CORS origin for frontend domain in backend
 
-### Option C: Docker (Production with external DB)
+### Option D: Docker (Production with external DB)
 - [ ] Set `DATABASE_URL` in `backend/.env` to your external PostgreSQL URL
 - [ ] Remove the `db` service from `docker-compose.yml` (or comment it out)
 - [ ] Run: `docker compose up -d --build backend frontend`
