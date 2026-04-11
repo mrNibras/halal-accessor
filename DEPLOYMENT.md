@@ -17,11 +17,13 @@
 - [ ] `VITE_API_URL` — Your production backend URL (e.g., `https://api.halalaccessor.com`)
 - [ ] `VITE_SUPABASE_*` — If still using Supabase for anything
 
-## 2. Database Setup
-- [ ] Provision PostgreSQL database
-- [ ] Run Prisma migration: `cd backend && npx prisma migrate deploy`
-- [ ] Run seed script: `cd backend && npx ts-node src/seed.ts`
-- [ ] Verify tables exist: `User`, `Product`, `Category`, `Cart`, `CartItem`, `Order`, `OrderItem`, `Payment`, `PaymentLog`, `Chat`, `Message`
+## 2. Database Setup (Neon Serverless PostgreSQL)
+- [ ] Create Neon account at [console.neon.tech](https://console.neon.tech/)
+- [ ] Create project → copy connection strings (see `NEON_SETUP.md`)
+- [ ] Set `DATABASE_URL`, `DIRECT_URL`, `SHADOW_DATABASE_URL` in `backend/.env`
+- [ ] Push schema: `cd backend && npx prisma db push`
+- [ ] Seed data: `cd backend && npx ts-node src/seed.ts`
+- [ ] Verify tables: `npx prisma studio`
 
 ## 3. Chapa Configuration
 - [ ] Register webhook URL in Chapa dashboard (`CHAPA_CALLBACK_URL`)

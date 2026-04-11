@@ -32,42 +32,40 @@ This project has 3 GitHub Actions workflows:
 ## Development (Local)
 
 ```bash
-# 1. Copy environment files
-cp .env.example .env
-cp backend/.env.example backend/.env
+# 1. Set up Neon Database (see NEON_SETUP.md)
+# Fill in backend/.env with your Neon connection strings
 
-# 2. Start all services
+# 2. (Optional) Start local PostgreSQL instead of Neon:
+docker compose -f docker-compose.dev.yml up -d
+
+# 3. Start app services
 docker compose up -d --build
 
-# 3. Run database migrations
-docker compose exec backend npx prisma migrate deploy
+# 4. Run database migrations (pushes schema to Neon or local DB)
+docker compose exec backend npx prisma db push
 
-# 4. Seed sample data
-docker compose exec backend node dist/seed.js
+# 5. Seed sample data
+docker compose exec backend npx ts-node src/seed.ts
 
-# 5. Access the app
+# 6. Access the app
 # Frontend: http://localhost:8080
 # Backend:  http://localhost:5000
-# Database: localhost:5432
 ```
 
-## Production (With External Database)
+## Production
 
 ```bash
 # 1. Fill in production values
 cp backend/.env.production backend/.env
-# Edit backend/.env with your real API keys and DATABASE_URL
+# Edit backend/.env with your Neon connection strings + real API keys
 
-# 2. Comment out the 'db' service in docker-compose.yml
-#    (or create a separate docker-compose.prod.yml without it)
-
-# 3. Build and start
+# 2. Build and start
 docker compose up -d --build
 
-# 4. Run migrations
+# 3. Run migrations (Neon)
 docker compose exec backend npx prisma migrate deploy
 
-# 5. Seed data (optional)
+# 4. Seed data (optional)
 docker compose exec backend node dist/seed.js
 ```
 
@@ -102,16 +100,16 @@ docker compose ps
 ## Architecture
 
 ```
-┌─────────────┐     ┌──────────────┐     ┌─────────────┐
-│  Frontend   │────▶│   Backend    │────▶│  PostgreSQL │
-│  (nginx)    │     │  (Express)   │     │             │
-│  :8080→80   │     │  :5000       │     │  :5432      │
-└─────────────┘     └──────────────┘     └─────────────┘
+┌─────────────┐     ┌──────────────┐     ┌─────────────────────┐
+│  Frontend   │────▶│   Backend    │────▶│  Neon (Serverless)  │
+│  (nginx)    │     │  (Express)   │    │  PostgreSQL         │
+│  :8080→80   │     │  :5000       │    │  neon.tech            │
+└─────────────┘     └──────────────┘     └─────────────────────┘
 ```
 
 - **Frontend**: Vite + React built to static files, served by nginx
 - **Backend**: Express.js + TypeScript compiled to JS, runs on Node.js
-- **Database**: PostgreSQL 16 with persistent volume
+- **Database**: Neon Serverless PostgreSQL (cloud-hosted, no container needed)
 
 ## Ports
 
@@ -119,4 +117,4 @@ docker compose ps
 |---|---|---|---|
 | Frontend | 80 | 8080 | Web app |
 | Backend | 5000 | 5000 | REST API + Socket.io |
-| PostgreSQL | 5432 | 5432 | Database |
+| Neon DB | N/A (cloud) | N/A | Database (hosted at neon.tech) |
